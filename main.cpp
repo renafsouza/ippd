@@ -10,55 +10,50 @@
 using namespace std;
 
 void compress(char* file_name, int width, int height, int frames, int block_size){
-    ifstream file (file_name, ios::in|ios::binary|ios::ate);
+    ifstream readFile (file_name, ios::in|ios::binary|ios::ate);
+    
     char extension[] = ".cmp";
-    ofstream compressedFile (strcat(file_name,extension), ios::out|ios::binary|ios::ate);
-    streampos readFileSize;
-    // vector<pair<vector<pair<int, int>>,vector<pair<int, int>>>> matches;
+    ofstream writeFile (strcat(file_name,extension), ios::out|ios::binary|ios::ate);
+
     char * readMemBlock, * compressedMemBlock;
 
-    if ( file.is_open() && compressedFile.is_open()) { // always check whether the file is open
-        readFileSize = file.tellg();
-        readMemBlock = new char [readFileSize];
+    if ( readFile.is_open() && writeFile.is_open() ) {
+        streampos readFileSize;
+        readFileSize = readFile.tellg();
         int writeFrameSize = width*height*8/(block_size*block_size)+(width*height*0.5);
         int readFrameSize = width*height*1.5;
         int writeFileSize = readFrameSize + writeFrameSize * (frames-1);
+        
+        readMemBlock = new char [readFileSize];
         compressedMemBlock = new char [writeFileSize];
-        for(int i = 0;i<writeFileSize;i++){
-            compressedMemBlock[i] = 0;
-        }
 
-        file.seekg (0, ios::beg);
-        file.read(readMemBlock, readFileSize); // pipe file's content into stream
-        file.close();
+        readFile.seekg (0, ios::beg);
+        readFile.read(readMemBlock, readFileSize);
+        readFile.close();
 
-        // Iterate through each frame except the first
-        int frameCount = 0;
-
-        // copy first frame
+        // Copies first frame
         for(int i = 0;i<readFrameSize; i++){
             compressedMemBlock[i] = readMemBlock[i];
         }
 
+        // Loops through all frames except the first
         #pragma omp parallel for
         for(int f=1;f<frames;++f){
             int readOffset = f*readFrameSize;
             int writeOffset = readFrameSize + (f-1)*writeFrameSize;
 
-            for(int i=0;i<height;i+=block_size){
-                for(int j=0;j<width;j+=block_size){
+            // Loops through every (block_size x block_size) block in the frame
+            for(int i=0; i<height; i+=block_size){
+                for(int j=0; j<width; j+=block_size){
                     pair<int, int> bestMatch;
                     float bestDiffAvg = -1;
-                    bool goodEnough = false;
-                    // Iterate through each line of each frame
+                    
+                    // Finds the (block_size x block_size) block that best matches the block in the original frame
                     for(int i2 = 0;i2<height-block_size;++i2){
-                        // Iterate through each column of each line
                         for(int j2 = 0;j2<width-block_size;++j2){
                             float diffAvg = 0;
-                            // Iterate trough each line of an 8x8 block
                             for(int ib = 0;ib<block_size;ib++){
                                 int lineOffset = (i+ib)*width;
-                                // Iterate trough each column of an 8x8 block
                                 for(int jb =0;jb<block_size;jb++){
                                     diffAvg += abs((int)readMemBlock[(readOffset+lineOffset)+j+jb] - (int)readMemBlock[(i2+ib)*width+j2+jb]);
                                 }
@@ -71,26 +66,28 @@ void compress(char* file_name, int width, int height, int frames, int block_size
                         }
                     }
                     
-                    compressedMemBlock[writeOffset++] = bestMatch.first>>24;
-                    compressedMemBlock[writeOffset++] = bestMatch.first>>16;
-                    compressedMemBlock[writeOffset++] = bestMatch.first>>8;
+                    // Write the best matches in the vector
                     compressedMemBlock[writeOffset++] = bestMatch.first;
-                    compressedMemBlock[writeOffset++] = bestMatch.second>>24;
-                    compressedMemBlock[writeOffset++] = bestMatch.second>>16;
-                    compressedMemBlock[writeOffset++] = bestMatch.second>>8;
+                    compressedMemBlock[writeOffset++] = bestMatch.first>>8;
+                    compressedMemBlock[writeOffset++] = bestMatch.first>>16;
+                    compressedMemBlock[writeOffset++] = bestMatch.first>>24;
                     compressedMemBlock[writeOffset++] = bestMatch.second;
+                    compressedMemBlock[writeOffset++] = bestMatch.second>>8;
+                    compressedMemBlock[writeOffset++] = bestMatch.second>>16;
+                    compressedMemBlock[writeOffset++] = bestMatch.second>>24;
                 }
             }
-            readOffset+=width*height;
+
+            readOffset += width*height;
+
+            // Copies the chrominance values
             for(int i = 0;i<(int) width*height*0.5; i++){
                 compressedMemBlock[writeOffset+i] = readMemBlock[readOffset+i];
             }
-            cout<<"f: "<<frameCount++<<endl;
         }
 
-        compressedFile.write (compressedMemBlock, writeFileSize);
-        compressedFile.close();
-        // ifstream file ("compressed.yuv", ios::in|ios::binary|ios::ate);
+        writeFile.write (compressedMemBlock, writeFileSize);
+        writeFile.close();
     } else {
         cout << "Unable to open file";
     }
@@ -100,7 +97,7 @@ void decompress(char* file_name, int width, int height, int frames, int block_si
     ifstream compressedFile (file_name, ios::in|ios::binary|ios::ate);
     string newFileName = "";
     for (int i = 0;i<strlen(file_name)-4;i++)
-        newFileName = newFileName+file_name[i];//file_name[i];
+        newFileName = newFileName+file_name[i];
     ofstream decompressedFile (newFileName, ios::out|ios::binary|ios::ate);
     streampos readFileSize;
     streampos writeFileSize;
@@ -112,10 +109,10 @@ void decompress(char* file_name, int width, int height, int frames, int block_si
         readMemBlock = new char [readFileSize];
         writeMemBlock = new char [writeFileSize];
         compressedFile.seekg (0, ios::beg);
-        compressedFile.read(readMemBlock,readFileSize); // pipe file's content into stream
+        compressedFile.read(readMemBlock,readFileSize);
         compressedFile.close();
 
-        // copy first frame
+        // Copies first frame
         int readFrameSize = width*height*8/(block_size*block_size)+width*height*0.5;
 
         for(int i = 0;i<writeFrameSize; i++){
@@ -129,24 +126,38 @@ void decompress(char* file_name, int width, int height, int frames, int block_si
             for(int i=0;i<height/block_size;i++){
                 for(int j=0;j<width/block_size;j++){
                     int readLineWidth = 8*width/block_size;
-                    int index = readOffset + i*readLineWidth + j*8;
+                    int bestMatchOffset = readOffset + i*readLineWidth + j*8;
 
-                    char bytes1[4]{ readMemBlock[index+3], readMemBlock[index+2], readMemBlock[index+1], readMemBlock[index] };
-                    char bytes2[4]{ readMemBlock[index+7], readMemBlock[index+6], readMemBlock[index+5], readMemBlock[index+4] };
-                    short readBlockLine,readBlockColumn;
-                    memcpy(&readBlockLine, bytes1, sizeof(int));
-                    memcpy(&readBlockColumn, bytes2, sizeof(int));
 
+                    // Reads the best matched block's line and column from the compressed file
+                    char bestMatchLineByteArr[4]{ 
+                        readMemBlock[bestMatchOffset],
+                        readMemBlock[bestMatchOffset+1],
+                        readMemBlock[bestMatchOffset+2],
+                        readMemBlock[bestMatchOffset+3]
+                    };
+                    char bestMatchColumnByteArr[4]{ 
+                        readMemBlock[bestMatchOffset+4],
+                        readMemBlock[bestMatchOffset+5],
+                        readMemBlock[bestMatchOffset+6],
+                        readMemBlock[bestMatchOffset+7]
+                    };
+
+                    short bestMatchLine,bestMatchColumn;
+                    memcpy(&bestMatchLine, bestMatchLineByteArr, sizeof(int));
+                    memcpy(&bestMatchColumn, bestMatchColumnByteArr, sizeof(int));
+
+                    // Writes the best matched block into the new file
                     for(int ib =0;ib<block_size;ib++){
                         for(int jb =0;jb<block_size;jb++){
                             
                             int lineOffset = (i*block_size+ib)*width,
                                 columnOffset = j*block_size+jb;
-                            int compressedFileLineOffset = (readBlockLine+ib)*width,
-                                compressedFileColumnOffset = readBlockColumn+jb;
+                            int bestMatchLineOffset = (bestMatchLine+ib)*width,
+                                bestMatchColumnOffset = bestMatchColumn+jb;
 
-                            writeMemBlock[writeOffset+lineOffset+columnOffset] =
-                                readMemBlock[compressedFileLineOffset+compressedFileColumnOffset];
+                            writeMemBlock[ writeOffset+lineOffset+columnOffset ] =
+                                readMemBlock[ bestMatchLineOffset+bestMatchColumnOffset ];
                                 
                         }
                     }
@@ -155,6 +166,7 @@ void decompress(char* file_name, int width, int height, int frames, int block_si
             writeOffset += width*height;
             readOffset+= width*height*8/(block_size*block_size);
 
+            // Copies the chrominance values
             for(int i=0;i<(int)(width*height*0.5);i++){
                 writeMemBlock[writeOffset+i] = readMemBlock[readOffset + i];
             }
@@ -175,7 +187,7 @@ void printHelp(char* programName){
 }
 int main(int argc, char** argv){
     int block_size;
-    if(argc>1 && (strcmp(argv[1],"-c") == 0 || strcmp(argv[1],"--compress") == 0)){
+    if( argc>1 && (strcmp(argv[1],"-c") == 0 || strcmp(argv[1],"--compress") == 0)){
         if(argc<6){
             cout<<argv[0]<<": Número de argumentos insuficiente"<<endl;
             printHelp(argv[0]);
