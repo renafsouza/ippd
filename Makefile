@@ -1,2 +1,5 @@
-all:
-	g++ main.cpp -lpthread -fopenmp -o video_compression
+all: decompress compress
+compress:
+	mpic++ compress.cpp -fopenmp -lpthread -o compress
+decompress:
+	g++ decompress.cpp -lpthread -fopenmp -o decompress

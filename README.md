@@ -2,7 +2,7 @@
 
 Esse repositório é a implementação de um trabalho de Introdução ao Processamento Paralelo e Distribuido.
 
-Consiste de um algoritmo que comprime 
+Consiste de um algoritmo que comprime e descomprime arquivos de video do formato YUV.
 
 ## Instalação
 
@@ -16,14 +16,15 @@ make
 
 Listar menu de ajuda:
 ```bash
-video_compression -h
+compress -h
+decompress -h
 ```
 Comprimir um arquivo:
 ```bash
-video_compression -c [file.yuv]
+compress file.yuv 120 640 360
 ```
 
 Descomprimir um arquivo:
 ```bash
-video_compression -d [file.yuv]
+decompress file.yuv.cmp 120 640 360
 ```
